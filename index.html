@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Vigie Métro</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Vigie Métro">
+<meta name="theme-color" content="#0B0B10">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{
+    --bg:#0B0B10; --card:#15151D; --border:#24242F;
+    --tx:#F2F2F7; --tx2:#9A9AAB; --acc:#00C2A8;
+    --r4:#FF453A; --r3:#FF9F0A; --r2:#FFD60A; --r1:#30D158;
+    --sat:env(safe-area-inset-top); --sab:env(safe-area-inset-bottom);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  svg.ic{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  /* ---- header ---- */
+  header{position:fixed;top:0;left:0;right:0;z-index:1000;padding:calc(var(--sat) + 10px) 12px 8px;
+    background:linear-gradient(var(--bg) 70%,transparent)}
+  .hcard{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);
+    border-radius:16px;padding:10px 12px}
+  .logo{width:34px;height:34px;border-radius:9px;flex:none;
+    background:linear-gradient(135deg,#00C2A8,#0A84FF);display:flex;align-items:center;justify-content:center;color:#fff}
+  .logo svg{width:18px;height:18px}
+  .hcard b{font-size:15px}
+  .hcard small{display:block;color:var(--tx2);font-size:12px;margin-top:1px}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:10px 2px 4px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;font-size:12px;font-weight:600;color:var(--tx);background:var(--card);
+    border:1px solid var(--border);border-radius:99px;padding:7px 12px;cursor:pointer}
+  .chip.on{background:var(--acc);color:#000;border-color:var(--acc)}
+  .lb{display:inline-flex;align-items:center;justify-content:center;border-radius:8px;
+    font-weight:800;font-size:13px;flex:none;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .lb.on{outline:2px solid #fff;outline-offset:1px}
+  /* ---- layout ---- */
+  main{position:fixed;inset:0;padding-top:calc(var(--sat) + 108px);padding-bottom:calc(var(--sab) + 64px)}
+  section{display:none;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  section.act{display:block}
+  #view-map{overflow:hidden;padding-top:0!important}
+  #map{position:absolute;inset:0;background:#0B0B10}
+  .legend{position:absolute;left:12px;right:12px;bottom:calc(var(--sab) + 72px);z-index:900;
+    display:flex;justify-content:center;gap:12px;flex-wrap:wrap;pointer-events:none;
+    background:rgba(21,21,29,.85);backdrop-filter:blur(10px);border:1px solid var(--border);
+    border-radius:12px;padding:8px 12px;font-size:11px;color:var(--tx2)}
+  .legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+  /* ---- cards / lists ---- */
+  .wrap{padding:12px 14px 20px;max-width:640px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px}
+  h1{font-size:19px;margin:6px 0 12px}
+  h2{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--tx2);margin-bottom:10px}
+  .muted{color:var(--tx2);font-size:12px}
+  .row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+  .row:last-child{border-bottom:none}
+  .grow{flex:1;min-width:0}
+  .grow b{font-size:14px;font-weight:600}
+  .grow small{display:block;color:var(--tx2);font-size:11px;margin-top:1px}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--tx2);
+    background:var(--bg);border:1px solid var(--border);border-radius:99px;padding:4px 9px;flex:none}
+  .pill i{width:6px;height:6px;border-radius:50%}
+  .act-ic{background:none;border:none;color:var(--acc);cursor:pointer;padding:4px}
+  .act-ic.gray{color:var(--tx2)}
+  .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;
+    border:none;border-radius:12px;background:var(--acc);color:#000;font-size:14px;font-weight:700;cursor:pointer}
+  .btn:disabled{background:var(--card);color:var(--tx2)}
+  .btn.sec{background:var(--card);color:var(--tx);border:1px solid var(--border);margin-top:10px}
+  .grid5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+  .grid5 .lb{width:100%;aspect-ratio:1;font-size:17px;border-radius:10px}
+  .dir{display:flex;gap:8px}
+  .dir button{flex:1;font-size:11px;font-weight:600;color:var(--tx);background:var(--bg);
+    border:1px solid var(--border);border-radius:10px;padding:9px 6px;cursor:pointer;line-height:1.25}
+  .dir button.on{background:var(--acc);color:#000;border-color:var(--acc)}
+  .seg{display:flex;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:3px;margin-bottom:14px}
+  .seg button{flex:1;padding:8px;border:none;border-radius:8px;background:none;color:var(--tx2);
+    font-size:13px;font-weight:600;cursor:pointer}
+  .seg button.on{background:var(--acc);color:#000}
+  .bars{display:flex;align-items:flex-end;gap:2px;height:58px;margin:10px 0 6px}
+  .bars div{flex:1;border-radius:2px;min-height:4px}
+  .bars div.now{outline:1.5px solid #fff;outline-offset:-1px}
+  .axis{display:flex;justify-content:space-between;font-size:10px;color:var(--tx2)}
+  .wins{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .wins span{font-size:11px;font-weight:600;background:var(--bg);border:1px solid var(--border);
+    border-radius:99px;padding:4px 10px;font-variant-numeric:tabular-nums}
+  .stats{display:flex;gap:10px;margin-bottom:12px}
+  .stats .card{flex:1;text-align:left;margin:0}
+  .stats b{font-size:22px}
+  .stats small{display:block;color:var(--tx2);font-size:11px;margin-top:2px}
+  /* ---- sheet ---- */
+  #backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1490;opacity:0;pointer-events:none;transition:.2s}
+  #backdrop.on{opacity:1;pointer-events:auto}
+  #sheet{position:fixed;left:0;right:0;bottom:0;z-index:1500;background:var(--bg);
+    border-radius:20px 20px 0 0;border-top:1px solid var(--border);max-height:78%;
+    transform:translateY(105%);transition:transform .28s cubic-bezier(.32,.72,.28,1);
+    display:flex;flex-direction:column;padding-bottom:var(--sab)}
+  #sheet.on{transform:translateY(0)}
+  #sheet .grab{width:40px;height:5px;border-radius:3px;background:var(--border);margin:10px auto 4px;flex:none}
+  #sheet .inner{overflow-y:auto;padding:6px 16px 24px}
+  /* ---- nav ---- */
+  nav{position:fixed;left:0;right:0;bottom:0;z-index:1200;display:flex;
+    background:rgba(21,21,29,.92);backdrop-filter:blur(14px);border-top:1px solid var(--border);
+    padding:8px 6px calc(var(--sab) + 8px)}
+  nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;background:none;
+    border:none;color:var(--tx2);font-size:10px;font-weight:600;cursor:pointer}
+  nav button.on{color:var(--acc)}
+  .done{text-align:center;padding:20px 0}
+  .done .ok{width:56px;height:56px;border-radius:50%;background:var(--acc);display:flex;
+    align-items:center;justify-content:center;margin:0 auto 14px;color:#000}
+  .done .ok svg{width:28px;height:28px;stroke-width:3}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hcard">
+    <div class="logo"><svg class="ic" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+    <div class="grow"><b>Vigie Métro</b><small id="hdate"></small></div>
+    <svg class="ic" style="color:var(--acc)" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M19.07 4.93a10 10 0 0 1 0 14.14M4.93 19.07a10 10 0 0 1 0-14.14"/></svg>
+  </div>
+  <div class="chips" id="chips"></div>
+</header>
+
+<main>
+  <section id="view-map" class="act">
+    <div id="map"></div>
+    <div class="legend">
+      <span><i style="background:var(--r4)"></i>Contrôles en cours</span>
+      <span><i style="background:var(--r3)"></i>Activité récente</span>
+      <span><i style="background:var(--r2)"></i>Possible</span>
+      <span><i style="background:var(--r1)"></i>Calme</span>
+    </div>
+  </section>
+
+  <section id="view-forecast"><div class="wrap">
+    <div class="seg" id="dayseg">
+      <button class="on" data-d="0">Aujourd'hui</button>
+      <button data-d="1">Demain</button>
+    </div>
+    <h1 id="fdate"></h1>
+    <div id="flist"></div>
+  </div></section>
+
+  <section id="view-report"><div class="wrap" id="rwrap"></div></section>
+
+  <section id="view-feed"><div class="wrap" id="fwrap"></div></section>
+</main>
+
+<div id="backdrop"></div>
+<div id="sheet">
+  <div class="grab"></div>
+  <div class="inner" id="sheetin"></div>
+</div>
+
+<nav>
+  <button data-v="map" class="on"><svg class="ic" viewBox="0 0 24 24"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>Carte</button>
+  <button data-v="forecast"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Prévisions</button>
+  <button data-v="report"><svg class="ic" viewBox="0 0 24 24"><path d="M3 11l14-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Signaler</button>
+  <button data-v="feed"><svg class="ic" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>Fil</button>
+</nav>
+
+<script>
+/* ================= DONNÉES ================= */
+const LINES=[
+ {id:1, c:'#FFCD00',d:1,t1:'La Défense',t2:'Château de Vincennes'},
+ {id:2, c:'#6ECA97',d:1,t1:'Porte Dauphine',t2:'Nation'},
+ {id:3, c:'#837558',d:0,t1:'Pont de Levallois',t2:'Gallieni'},
+ {id:4, c:'#BB4E9C',d:0,t1:'Porte de Clignancourt',t2:'Bagneux–Lucie Aubrac'},
+ {id:5, c:'#FF7E2D',d:0,t1:'Bobigny–Pablo Picasso',t2:"Place d'Italie"},
+ {id:6, c:'#6ECA97',d:1,t1:'Charles de Gaulle–Étoile',t2:'Nation'},
+ {id:7, c:'#FA9ABA',d:1,t1:'La Courneuve–8 Mai 1945',t2:"Mairie d'Ivry"},
+ {id:8, c:'#B6BD00',d:1,t1:'Balard',t2:'Pointe du Lac'},
+ {id:9, c:'#B6BD00',d:1,t1:'Pont de Sèvres',t2:'Mairie de Montreuil'},
+ {id:10,c:'#9F9826',d:0,t1:'Boulogne–Pont de Saint-Cloud',t2:"Gare d'Austerlitz"},
+ {id:11,c:'#8E5B24',d:0,t1:'Châtelet',t2:'Rosny–Bois-Perrier'},
+ {id:12,c:'#007549',d:0,t1:'Front Populaire',t2:"Mairie d'Issy"},
+ {id:13,c:'#6ECBEF',d:1,t1:'Asnières–Gennevilliers',t2:'Châtillon–Montrouge'},
+ {id:14,c:'#62259D',d:0,t1:'Mairie de Saint-Ouen',t2:"Aéroport d'Orly"}];
+const S=(n,l,la,lo)=>({name:n,lines:l,lat:la,lng:lo});
+const STATIONS=[
+ S("La Défense",[1],48.8917,2.2387),S("Porte Maillot",[1],48.8781,2.2829),
+ S("Charles de Gaulle–Étoile",[1,2,6],48.8742,2.2955),S("George V",[1],48.8721,2.3001),
+ S("Franklin D. Roosevelt",[1,9],48.8691,2.3077),S("Champs-Élysées–Clémenceau",[1,13],48.8677,2.3128),
+ S("Concorde",[1,8,12],48.8662,2.3225),S("Tuileries",[1],48.8637,2.3286),
+ S("Palais Royal",[1,7],48.8619,2.3361),S("Louvre–Rivoli",[1],48.8601,2.3416),
+ S("Châtelet",[1,4,7,11,14],48.8582,2.3468),S("Hôtel de Ville",[1,11],48.8575,2.3525),
+ S("Saint-Paul",[1],48.8556,2.3613),S("Bastille",[1,5,8],48.8532,2.3693),
+ S("Nation",[1,2,6,9],48.8484,2.3958),S("Porte de Vincennes",[1],48.8473,2.4109),
+ S("Château de Vincennes",[1],48.8440,2.4415),
+ S("Porte Dauphine",[2],48.8710,2.2756),S("Villiers",[2,3],48.8794,2.3123),
+ S("Place de Clichy",[2,13],48.8835,2.3273),S("Blanche",[2],48.8846,2.3323),
+ S("Pigalle",[2],48.8825,2.3374),S("Anvers",[2],48.8851,2.3401),
+ S("Barbès–Rochechouart",[2,4],48.8834,2.3496),S("Stalingrad",[2,5,7],48.8844,2.3626),
+ S("Jaurès",[2,5],48.8827,2.3700),S("Colonel Fabien",[2],48.8784,2.3701),
+ S("Belleville",[2,11],48.8720,2.3769),S("Couronnes",[2],48.8677,2.3822),
+ S("Père Lachaise",[2,3],48.8636,2.3872),S("Philippe Auguste",[2],48.8594,2.3913),
+ S("Alexandre Dumas",[2],48.8549,2.3955),
+ S("Saint-Lazare",[3,12,13,14],48.8757,2.3253),S("Havre–Caumartin",[3,9],48.8732,2.3281),
+ S("Opéra",[3,7,8],48.8707,2.3316),S("Réaumur–Sébastopol",[3,4],48.8663,2.3509),
+ S("Arts et Métiers",[3],48.8665,2.3629),S("République",[3,5,8,9,11],48.8673,2.3630),
+ S("Porte de Bagnolet",[3],48.8653,2.4056),
+ S("Porte de Clignancourt",[4],48.8983,2.3445),S("Simplon",[4],48.8954,2.3440),
+ S("Marcadet–Poissonniers",[4],48.8913,2.3464),S("Château Rouge",[4],48.8872,2.3477),
+ S("Gare du Nord",[4,5],48.8809,2.3553),S("Gare de l'Est",[4,5,7],48.8760,2.3593),
+ S("Château d'Eau",[4],48.8705,2.3592),S("Strasbourg–Saint-Denis",[4,8,9],48.8674,2.3545),
+ S("Étienne Marcel",[4],48.8630,2.3484),S("Les Halles",[4],48.8600,2.3472),
+ S("Cité",[4],48.8552,2.3470),S("Saint-Michel",[4],48.8531,2.3443),
+ S("Odéon",[4,10],48.8520,2.3389),S("Saint-Germain-des-Prés",[4],48.8539,2.3339),
+ S("Saint-Placide",[4],48.8462,2.3272),S("Montparnasse–Bienvenüe",[4,6,12],48.8439,2.3232),
+ S("Vavin",[4,12],48.8425,2.3276),S("Raspail",[4,12],48.8384,2.3299),
+ S("Denfert-Rochereau",[4,6],48.8342,2.3326),S("Mouton-Duvernet",[4],48.8296,2.3311),
+ S("Alésia",[4],48.8259,2.3272),S("Porte d'Orléans",[4],48.8233,2.3252),
+ S("Mairie de Montrouge",[4],48.8180,2.3205),
+ S("Oberkampf",[5,9],48.8659,2.3714),S("Quai de la Rapée",[5],48.8455,2.3668),
+ S("Gare d'Austerlitz",[5,10],48.8420,2.3640),S("Place d'Italie",[5,6,7],48.8311,2.3554),
+ S("Trocadéro",[6,9],48.8639,2.2870),S("Passy",[6],48.8585,2.2893),
+ S("Bir-Hakeim",[6],48.8546,2.2892),S("La Motte-Picquet–Grenelle",[6,8],48.8494,2.2980),
+ S("Pasteur",[6],48.8447,2.3111),S("Edgar Quinet",[6],48.8409,2.3265),
+ S("Saint-Jacques",[6],48.8337,2.3345),S("Glacière",[6],48.8305,2.3439),
+ S("Corvisart",[6],48.8289,2.3505),S("Bercy",[6,14],48.8404,2.3792),
+ S("Daumesnil",[6,8],48.8413,2.3867),S("Dugommier",[6],48.8428,2.3908),
+ S("Picpus",[6],48.8479,2.3950),
+ S("Chaussée d'Antin–La Fayette",[7,9],48.8725,2.3322),S("Jussieu",[7,10],48.8457,2.3520),
+ S("Maison Blanche",[7,14],48.8227,2.3562),
+ S("École Militaire",[8],48.8545,2.3047),S("La Tour-Maubourg",[8],48.8544,2.3118),
+ S("Invalides",[8,13],48.8616,2.3125),S("Madeleine",[8,12,14],48.8700,2.3247),
+ S("Grands Boulevards",[8,9],48.8706,2.3437),S("Chemin Vert",[8],48.8581,2.3705),
+ S("Porte de Charenton",[8],48.8369,2.3950),S("Porte Dorée",[8],48.8345,2.4060),
+ S("Alma–Marceau",[9],48.8653,2.3025),S("Porte de Montreuil",[9],48.8537,2.4072),
+ S("Cluny–La Sorbonne",[10],48.8495,2.3429),S("Maubert–Mutualité",[10],48.8485,2.3483),
+ S("Duroc",[10,13],48.8490,2.3184),S("Sèvres–Babylone",[10,12],48.8510,2.3246),
+ S("Assemblée Nationale",[12],48.8594,2.3166),S("Vaugirard",[12],48.8398,2.3113),
+ S("Convention",[12],48.8342,2.3007),S("Porte de Versailles",[12],48.8315,2.2890),
+ S("Pyramides",[14],48.8667,2.3367),S("Gare de Lyon",[1,14],48.8449,2.3736),
+ S("Cour Saint-Émilion",[14],48.8334,2.3860),S("Bibliothèque F. Mitterrand",[14],48.8290,2.3761),
+ S("Olympiades",[14],48.8260,2.3676)];
+
+const PROFILE=[0,0,0,0,0,.05,.30,.75,1,.70,.40,.35,.45,.40,.35,.40,.55,.85,1,.90,.50,.30,.15,.05];
+const HOT=new Set([1,4,6,13]);
+const HUBS={"Gare du Nord":1.35,"Châtelet":1.35,"Gare de l'Est":1.3,"Gare de Lyon":1.3,
+ "Saint-Lazare":1.3,"Montparnasse–Bienvenüe":1.3,"République":1.25,"Nation":1.25,
+ "Denfert-Rochereau":1.25,"Place d'Italie":1.2,"La Défense":1.2,"Barbès–Rochechouart":1.25,
+ "Porte de Clignancourt":1.2,"Strasbourg–Saint-Denis":1.2,"Bastille":1.15};
+const LIFE=40*60*1000;
+const LVL=[{l:"Calme",c:"var(--r1)"},{l:"Possible",c:"var(--r2)"},{l:"Activité récente",c:"var(--r3)"},{l:"Contrôles en cours",c:"var(--r4)"}];
+
+/* ================= MOTEUR ================= */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+ t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const line=id=>LINES.find(l=>l.id===id);
+const stn=n=>STATIONS.find(s=>s.name===n);
+const fresh=(r,now)=>{if(r.ended)return 0;const a=now-r.ts;if(a<0||a>=LIFE)return 0;
+ return (1-a/LIFE)*(1+.25*(r.confirmations||0))};
+function intensity(h,ln){let v=PROFILE[Math.max(0,Math.min(23,h))];
+ if(ln)v*=HOT.has(ln)?1.25:.9;return v}
+function risk(st,now){const live=REPORTS.filter(r=>r.stationName===st.name)
+  .reduce((a,r)=>a+fresh(r,now),0);
+ const hour=new Date(now).getHours();
+ const hot=st.lines.some(l=>HOT.has(l));
+ const amb=intensity(hour)*(hot?.30:.15)*(HUBS[st.name]||1);
+ return live>=.75?3:live>=.20?2:amb>=.20?1:0}
+function windows(ln){const mx=HOT.has(ln)?1.25:.9,th=.7*mx,out;const out=[];
+ let s=null;for(let h=0;h<24;h++){const on=intensity(h,ln)>=th;
+  if(on&&s===null)s=h;if(!on&&s!==null){out.push([s,h-1]);s=null}}
+ if(s!==null)out.push([s,23]);return out}
+const hm=ts=>new Date(ts).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+
+/* Signalements : grain quotidien déterministe + saisies utilisateur */
+let REPORTS=[];
+function ensureSeed(){
+ const day=Math.floor(Date.now()/86400000);
+ try{const s=JSON.parse(localStorage.getItem('vm_seed'));
+  if(s&&s.day===day){REPORTS=s.reports.concat(loadUser());return}}catch(e){}
+ const rnd=mulberry32((day*2654435761)>>>0);
+ const hubs=STATIONS.filter(s=>HUBS[s.name]);
+ const seed=[];const n=14+Math.floor(rnd()*8);
+ for(let i=0;i<n;i++){
+  const st=rnd()<.6?hubs[Math.floor(rnd()*hubs.length)%hubs.length]
+                   :STATIONS[Math.floor(rnd()*STATIONS.length)%STATIONS.length];
+  const hot=st.lines.filter(l=>HOT.has(l));
+  const ln=(hot.length&&rnd()<.7)?hot[Math.floor(rnd()*hot.length)%hot.length]:st.lines[0];
+  const L=line(ln);
+  seed.push({id:'s'+i+day,stationName:st.name,line:ln,
+   direction:rnd()<.5?L.t1:L.t2,ts:Date.now()-Math.pow(rnd(),1.6)*50*60*1000,
+   confirmations:Math.floor(rnd()*3),ended:rnd()<.2})}
+ REPORTS=seed.concat(loadUser());
+ localStorage.setItem('vm_seed',JSON.stringify({day,reports:seed}))}
+const loadUser=()=>{try{return JSON.parse(localStorage.getItem('vm_user'))||[]}catch(e){return[]}};
+const saveUser=()=>{const u=REPORTS.filter(r=>!r.id.startsWith('s'));
+ localStorage.setItem('vm_user',JSON.stringify(u))};
+
+/* ================= UI ================= */
+const $=q=>document.querySelector(q);
+let filterLine=null, dayOff=0;
+let rstate={line:null,station:null,dir:null,pre:null,done:false};
+
+function badge(ln,size,sel){const L=line(ln);
+ return `<span class="lb${sel?' on':''}" style="width:${size}px;height:${size}px;
+  font-size:${size*.5}px;background:${L.c};color:${L.d?'#101010':'#fff'}">${ln}</span>`}
+
+function buildChips(){let h=`<span class="chip${filterLine===null?' on':''}" data-l="">Toutes</span>`;
+ LINES.forEach(L=>h+=`<span class="chip" data-l="${L.id}" style="padding:4px 6px">${badge(L.id,22,filterLine===L.id)}</span>`);
+ $('#chips').innerHTML=h;
+ $('#chips').querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+  filterLine=c.dataset.l?+c.dataset.l:null;buildChips();drawMarkers()})}
+
+function setView(v){
+ document.querySelectorAll('main section').forEach(s=>s.classList.remove('act'));
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+ $('#view-'+v).classList.add('act');
+ if(v==='forecast')drawForecast();
+ if(v==='report')drawReport();
+ if(v==='feed')drawFeed();
+ if(v==='map')setTimeout(()=>map.invalidateSize(),50)}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+
+/* ---- carte ---- */
+const map=L.map('map',{zoomControl:false,attributionControl:true}).setView([48.8566,2.3522],12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+ attribution:'© OpenStreetMap © CARTO',maxZoom:19}).addTo(map);
+const dots={},halos={};
+function lvlColor(i){return['#30D158','#FFD60A','#FF9F0A','#FF453A'][i]}
+function drawMarkers(){
+ const now=Date.now();
+ Object.values(dots).forEach(m=>map.removeLayer(m));
+ Object.values(halos).forEach(m=>map.removeLayer(m));
+ for(const d in dots)delete dots[d];for(const d in halos)delete halos[d];
+ STATIONS.filter(s=>!filterLine||s.lines.includes(filterLine)).forEach(st=>{
+  const lv=risk(st,now),c=lvlColor(lv);
+  halos[st.name]=L.circleMarker([st.lat,st.lng],{radius:13,color:false,fillColor:c,fillOpacity:.22,interactive:false}).addTo(map);
+  dots[st.name]=L.circleMarker([st.lat,st.lng],{radius:6,color:'#fff',weight:1.5,fillColor:c,fillOpacity:1})
+   .addTo(map).on('click',()=>openSheet(st))})}
+function refreshDots(){const now=Date.now();
+ STATIONS.forEach(st=>{const c=lvlColor(risk(st,now));
+  if(dots[st.name]){dots[st.name].setStyle({fillColor:c});halos[st.name].setStyle({fillColor:c})}})}
+
+/* ---- fiche station ---- */
+function openSheet(st){
+ const now=Date.now(),lv=risk(st,now);
+ const act=REPORTS.filter(r=>r.stationName===st.name&&fresh(r,now)>0)
+  .sort((a,b)=>b.ts-a.ts);
+ let win=null;const h=new Date(now).getHours();
+ outer:for(const ln of st.lines)for(const w of windows(ln)){
+  if(h>=w[0]&&h<=w[1]){win=`Fenêtre à risque habituelle en cours (${String(w[0]).padStart(2,'0')}h00 – ${String(w[1]+1).padStart(2,'0')}h00) · Ligne ${ln}`;break outer}
+  if(h<w[0]){win=`Prochaine fenêtre habituelle : ${String(w[0]).padStart(2,'0')}h00 – ${String(w[1]+1).padStart(2,'0')}h00 · Ligne ${ln}`;break outer}}
+ let rows=act.map(r=>`<div class="row">${badge(r.line,24)}
+  <div class="grow"><b>Signalé à ${hm(r.ts)}</b>
+  <small>il y a ${Math.max(1,Math.round((now-r.ts)/60000))} min · ${r.confirmations} confirmation(s)${r.direction?' · direction '+r.direction:''}</small></div>
+  <button class="act-ic" onclick="vote('${r.id}',1)"><svg class="ic" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>
+  <button class="act-ic gray" onclick="vote('${r.id}',0)"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></button>
+ </div>`).join('');
+ if(!rows)rows=`<p class="muted" style="padding:6px 0">Aucun contrôle signalé pour le moment sur cette station.</p>`;
+ $('#sheetin').innerHTML=`
+  <div style="display:flex;align-items:flex-start;gap:10px">
+   <div class="grow"><h1 style="margin:0">${st.name}</h1>
+    <div style="display:flex;gap:6px;margin-top:8px">${st.lines.map(l=>badge(l,22)).join('')}</div></div>
+   <span class="pill"><i style="background:${lvlColor(lv)}"></i>${LVL[lv].l}</span>
+   <button class="act-ic gray" onclick="closeSheet()"><svg class="ic" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+  </div>
+  ${win?`<p class="muted" style="margin:12px 0 0;display:flex;gap:6px;align-items:center">
+   <svg class="ic" style="width:14px;height:14px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${win}</p>`:''}
+  <h2 style="margin-top:16px">Signalements actifs</h2>${rows}
+  <button class="btn" style="margin-top:14px" onclick='startReport(${JSON.stringify(st.name)})'>
+   <svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24"><path d="M3 11l14-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+   Signaler un contrôle ici</button>`;
+ $('#sheet').classList.add('on');$('#backdrop').classList.add('on')}
+window.closeSheet=()=>{$('#sheet').classList.remove('on');$('#backdrop').classList.remove('on')};
+ $('#backdrop').onclick=closeSheet;
+window.vote=(id,ok)=>{
+ const i=REPORTS.findIndex(r=>r.id===id);if(i<0)return;
+ if(ok){REPORTS[i].confirmations++;
+  const floor=Date.now()-10*60*1000;if(REPORTS[i].ts<floor)REPORTS[i].ts=floor}
+ else REPORTS[i].ended=true;
+ saveUser();drawMarkers();
+ const name=REPORTS[i].stationName;if($('#sheet').classList.contains('on'))openSheet(stn(name))};
+
+/* ---- prévisions ---- */
+ $('#dayseg').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+ dayOff=+b.dataset.d;
+ $('#dayseg').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));
+ drawForecast()});
+function drawForecast(){
+ const d=new Date(Date.now()+dayOff*86400000);
+ $('#fdate').textContent=d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+ const curH=new Date().getHours(),isToday=dayOff===0;
+ $('#flist').innerHTML=LINES.map(L=>{
+  const bars=Array.from({length:24},(_,h)=>{
+   const v=intensity(h,L.id);
+   return `<div class="${isToday&&h===curH?'now':''}" style="height:${8+46*v}px;background:${L.c};opacity:${.2+.8*v}"></div>`}).join('');
+  const wins=windows(L.id).map(w=>
+   `<span>${String(w[0]).padStart(2,'0')}h00 – ${String(w[1]+1).padStart(2,'0')}h00</span>`).join('');
+  return `<div class="card">
+   <div style="display:flex;align-items:center;gap:10px">${badge(L.id,26)}
+    <b style="font-size:14px">Ligne ${L.id}</b>
+    <span class="muted grow" style="text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${L.t1} ↔ ${L.t2}</span></div>
+   <div class="bars">${bars}</div>
+   <div class="axis"><span>00h</span>${isToday?`<span style="color:var(--acc);font-weight:700">En cours : ${String(curH).padStart(2,'0')}h</span>`:''}<span>23h</span></div>
+   <div class="wins">${wins}</div></div>`}).join('')}
+
+/* ---- signaler ---- */
+window.startReport=name=>{rstate={line:null,station:name||null,dir:null,pre:name||null,done:false};
+ closeSheet();setView('report');drawReport()};
+function drawReport(){
+ const w=$('#rwrap');
+ if(rstate.done){
+  w.innerHTML=`<div class="card done">
+   <div class="ok"><svg class="ic" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+   <b style="font-size:17px">Signalement enregistré</b>
+   <p class="muted" style="margin:8px 0 16px">À ${hm(Date.now())} · ${rstate.station} · Ligne ${rstate.line}<br>Le signalement restera actif 40 minutes.</p>
+   <button class="btn" onclick="rstate.done=false;drawReport()">Nouveau signalement</button>
+   <button class="btn sec" onclick="setView('map')">Voir la carte</button></div>`;return}
+ const lines=rstate.pre?stn(rstate.pre).lines:LINES.map(l=>l.id);
+ const lineGrid=lines.map(id=>badge(id,0,rstate.line===id).replace('class="lb','data-l="'+id+'" class="lb')).join('');
+ const stList=rstate.line?
+  STATIONS.filter(s=>s.lines.includes(rstate.line)&&(!rstate.pre||s.name===rstate.pre))
+   .sort((a,b)=>a.name<b.name?-1:1):[];
+ let stHtml='';
+ if(!rstate.line)stHtml=`<p class="muted">Choisis d'abord une ligne.</p>`;
+ else if(!stList.length)stHtml=`<p class="muted">Choisis d'abord une ligne.</p>`;
+ else stHtml=stList.map(s=>`<div class="row" style="cursor:pointer" onclick="rstate.station='${s.name.replace(/'/g,"\\'")}';drawReport()">
+  <div class="grow"><b>${s.name}</b></div>
+  ${rstate.station===s.name?'<svg class="ic" style="color:var(--acc)" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>':''}</div>`).join('');
+ const dirs=rstate.line?[line(rstate.line).t1,line(rstate.line).t2,'Je ne sais pas']:[];
+ w.innerHTML=`
+  ${rstate.pre?`<div class="card" style="border-color:var(--acc)"><div style="display:flex;gap:10px;align-items:center">
+   <span class="muted">Station sélectionnée</span><b class="grow">${rstate.pre}</b>
+   <button class="act-ic gray" onclick="rstate.pre=null;rstate.station=null;drawReport()"><svg class="ic" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div></div>`:''}
+  <div class="card"><h2>Ligne</h2><div class="grid5">${lineGrid}</div></div>
+  <div class="card"><h2>Station</h2>${stHtml}</div>
+  <div class="card"><h2>Direction</h2>
+   ${rstate.line?`<div class="dir">${dirs.map(d=>`<button class="${rstate.dir===d?'on':''}" onclick="rstate.dir='${d.replace(/'/g,"\\'")}';drawReport()">${d}</button>`).join('')}</div>`:'<p class="muted">Disponible après le choix de la ligne.</p>'}</div>
+  <button class="btn" ${rstate.line&&rstate.station?'':'disabled'} onclick="submitReport()">
+   <svg class="ic" style="width:16px;height:16px" viewBox="0 0 24 24"><path d="M3 11l14-5v12L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+   Signaler un contrôle</button>`;
+ w.querySelectorAll('.lb[data-l]').forEach(b=>b.onclick=()=>{
+  const id=+b.dataset.l;
+  rstate.line=rstate.line===id?null:id;
+  if(rstate.pre&&!rstate.line)rstate.station=rstate.pre;
+  drawReport()})}
+window.drawReport=drawReport;
+function submitReport(){
+ REPORTS.push({id:'u'+Date.now(),stationName:rstate.station,line:rstate.line,
+  direction:rstate.dir,ts:Date.now(),confirmations:0,ended:false});
+ saveUser();drawMarkers();rstate.done=true;drawReport()}
+window.submitReport=submitReport;
+
+/* ---- fil ---- */
+function drawFeed(){
+ const now=new Date(),today=REPORTS.filter(r=>new Date(r.ts).toDateString()===now.toDateString())
+  .sort((a,b)=>b.ts-a.ts);
+ const rows=today.map(r=>{
+  const f=fresh(r,Date.now());
+  return `<div class="row">
+   <span class="muted" style="width:46px;font-weight:700;font-variant-numeric:tabular-nums">${hm(r.ts)}</span>
+   ${badge(r.line,24)}
+   <div class="grow"><b>${r.stationName}</b>${r.direction?`<small>Direction ${r.direction}</small>`:''}</div>
+   <span class="pill" style="color:${f>0?'var(--r4)':'var(--tx2)'}">
+    <i style="background:${f>0?'var(--r4)':'var(--tx2)'}"></i>${r.ended?'Terminé':f>0?'Actif':'Expiré'}</span></div>`}).join('');
+ $('#fwrap').innerHTML=`
+  <h1>${now.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</h1>
+  <div class="stats">
+   <div class="card"><b>${today.length}</b><small>signalements aujourd'hui</small></div>
+   <div class="card"><b>${new Set(today.map(r=>r.stationName)).size}</b><small>stations concernées</small></div></div>
+  ${rows||'<div class="card"><p class="muted">Aucun signalement aujourd\'hui.</p></div>'}`}
+
+/* ---- horloge + init ---- */
+function tick(){
+ const n=new Date();
+ $('#hdate').textContent=n.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})
+  +' · '+n.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}
+ensureSeed();buildChips();drawMarkers();tick();
+setInterval(tick,15000);setInterval(refreshDots,60000);
+setInterval(()=>{ensureSeed();drawMarkers()},120000);
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+</body>
+</html>
